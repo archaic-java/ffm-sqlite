@@ -9,9 +9,11 @@ import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandle;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import work.archaic.service.sqlite.v01.Session;
+import work.archaic.service.sqlite.v01.Checkpoint;
 import work.archaic.service.sqlite.v01.SqliteException;
 import work.archaic.service.sqlite.v01.Statement;
 
@@ -30,6 +32,14 @@ final class Native {
     private static final MethodHandle FINALIZE = fn("sqlite3_finalize", INT, PTR);
     private static final MethodHandle MESSAGE = fn("sqlite3_errmsg", PTR, PTR);
     private static final MethodHandle BUSY_TIMEOUT = fn("sqlite3_busy_timeout", INT, PTR, INT);
+    private static final MethodHandle THREADSAFE = fn("sqlite3_threadsafe", INT);
+    private static final MethodHandle ERR_CODE = fn("sqlite3_extended_errcode", INT, PTR);
+    private static final MethodHandle BACKUP_INIT = fn("sqlite3_backup_init", PTR, PTR, PTR, PTR, PTR);
+    private static final MethodHandle BACKUP_STEP = fn("sqlite3_backup_step", INT, PTR, INT);
+    private static final MethodHandle BACKUP_FINISH = fn("sqlite3_backup_finish", INT, PTR);
+    private static final MethodHandle CHECKPOINT = fn("sqlite3_wal_checkpoint_v2", INT, PTR, PTR, INT, PTR, PTR);
+    private static final MethodHandle INTERRUPT = LINKER.downcallHandle(
+            LIBRARY.find("sqlite3_interrupt").orElseThrow(), FunctionDescriptor.ofVoid(PTR));
     private static final MethodHandle BIND_LONG = fn("sqlite3_bind_int64", INT, PTR, INT, LONG);
     private static final MethodHandle BIND_DOUBLE = fn("sqlite3_bind_double", INT, PTR, INT, DOUBLE);
     private static final MethodHandle BIND_TEXT = fn("sqlite3_bind_text", INT, PTR, INT, PTR, INT, PTR);
@@ -42,7 +52,7 @@ final class Native {
     private static final MethodHandle COLUMN_TEXT = fn("sqlite3_column_text", PTR, PTR, INT);
     private static final MethodHandle COLUMN_BLOB = fn("sqlite3_column_blob", PTR, PTR, INT);
     private static final MethodHandle COLUMN_BYTES = fn("sqlite3_column_bytes", INT, PTR, INT);
-    private static final int OK = 0, ROW = 100, DONE = 101, NULL = 5;
+    private static final int OK = 0, BUSY = 5, LOCKED = 6, ROW = 100, DONE = 101, NULL = 5;
     private static final int READONLY = 0x1, READWRITE = 0x2, CREATE = 0x4, EXRESCODE = 0x02000000;
     private static final MemorySegment TRANSIENT = MemorySegment.ofAddress(-1L);
 
@@ -61,6 +71,11 @@ final class Native {
     private static int integer(MethodHandle method, Object... args) { return (int) call(method, args); }
     private static MemorySegment pointer(MethodHandle method, Object... args) {
         return (MemorySegment) call(method, args);
+    }
+
+    static void validateLibrary() throws SqliteException {
+        if (integer(THREADSAFE) == 0)
+            throw new SqliteException("SQLite library was built without thread safety");
     }
 
     static Connection open(Path path, boolean readonly, boolean create) throws SqliteException {
@@ -86,7 +101,7 @@ final class Native {
         }
     }
 
-    static final class Connection {
+    static final class Connection implements AutoCloseable {
         private MemorySegment handle;
         Connection(MemorySegment handle) { this.handle = handle; }
 
@@ -94,8 +109,11 @@ final class Native {
             return new SqliteException(code, pointer(MESSAGE, handle).reinterpret(4096).getString(0));
         }
 
+        SqliteException currentError() { return error(integer(ERR_CODE, handle)); }
+
         StatementImpl prepare(String sql) throws SqliteException {
             if (handle == null) throw new IllegalStateException("Connection closed");
+            if (sql.indexOf('\0') >= 0) throw new IllegalArgumentException("SQL contains a NUL byte");
             try (Arena arena = Arena.ofConfined()) {
                 MemorySegment out = arena.allocate(PTR);
                 MemorySegment tail = arena.allocate(PTR);
@@ -120,7 +138,69 @@ final class Native {
             }
         }
 
-        void close() throws SqliteException {
+        String oneString(String sql) throws SqliteException {
+            try (var statement = prepare(sql)) {
+                if (!statement.step()) throw new SqliteException("Expected one row: " + sql);
+                return statement.stringAt(0);
+            }
+        }
+
+        long oneLong(String sql) throws SqliteException {
+            try (var statement = prepare(sql)) {
+                if (!statement.step()) throw new SqliteException("Expected one row: " + sql);
+                return statement.longAt(0);
+            }
+        }
+
+        Checkpoint checkpoint() throws SqliteException {
+            try (Arena arena = Arena.ofConfined()) {
+                var log = arena.allocate(INT);
+                var completed = arena.allocate(INT);
+                int code = integer(CHECKPOINT, handle, arena.allocateFrom("main"), 0, log, completed);
+                if (code != OK) throw error(code);
+                return new Checkpoint(log.get(INT, 0), completed.get(INT, 0));
+            }
+        }
+
+        void interrupt() { call(INTERRUPT, handle); }
+
+        void backupTo(Path destination, Duration limit) throws SqliteException {
+            try (var target = open(destination, false, true); Arena arena = Arena.ofConfined()) {
+                MemorySegment name = arena.allocateFrom("main");
+                MemorySegment backup = pointer(BACKUP_INIT, target.handle, name, handle, name);
+                if (backup.address() == 0) throw target.currentError();
+                Throwable failure = null;
+                long start = System.nanoTime();
+                try {
+                    for (;;) {
+                        if (System.nanoTime() - start >= limit.toNanos())
+                            throw new SqliteException("Online backup exceeded its time limit");
+                        int code = integer(BACKUP_STEP, backup, 64);
+                        if (code == DONE) break;
+                        if (code != OK && code != BUSY && code != LOCKED)
+                            throw target.error(code);
+                        // Release the source read lock between chunks and park the virtual thread.
+                        try { Thread.sleep(1); }
+                        catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            throw new SqliteException("Online backup interrupted", e);
+                        }
+                    }
+                } catch (SqliteException | RuntimeException | Error e) {
+                    failure = e;
+                    throw e;
+                } finally {
+                    int finish = integer(BACKUP_FINISH, backup);
+                    if (finish != OK) {
+                        var error = target.error(finish);
+                        if (failure == null) throw error;
+                        failure.addSuppressed(error);
+                    }
+                }
+            }
+        }
+
+        @Override public void close() throws SqliteException {
             if (handle == null) return;
             int code = integer(CLOSE, handle);
             if (code != OK) throw error(code);
@@ -141,7 +221,12 @@ final class Native {
             return statement;
         }
 
-        void close() throws SqliteException {
+        @Override public synchronized void cancel() {
+            if (closed) throw new IllegalStateException("Session expired");
+            connection.interrupt();
+        }
+
+        synchronized void close() throws SqliteException {
             if (closed) return;
             closed = true;
             SqliteException failure = null;
@@ -201,6 +286,7 @@ final class Native {
             done = code == DONE;
             if (row) return true;
             if (done) return false;
+            done = true;
             throw connection.error(code);
         }
         @Override public int columns() { active(); return integer(COLUMN_COUNT, handle); }
