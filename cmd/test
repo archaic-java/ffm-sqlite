@@ -1,0 +1,5 @@
+-ea
+--enable-native-access=work.archaic.sqlite
+--module-path out
+--add-modules work.archaic.sqlite
+-m work.archaic.sqlite.test/work.archaic.sqlite.test.SqliteTest
