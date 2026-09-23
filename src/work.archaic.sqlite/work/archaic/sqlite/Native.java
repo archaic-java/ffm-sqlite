@@ -53,7 +53,8 @@ final class Native {
     private static final MethodHandle COLUMN_BLOB = fn("sqlite3_column_blob", PTR, PTR, INT);
     private static final MethodHandle COLUMN_BYTES = fn("sqlite3_column_bytes", INT, PTR, INT);
     private static final int OK = 0, BUSY = 5, LOCKED = 6, ROW = 100, DONE = 101, NULL = 5;
-    private static final int READONLY = 0x1, READWRITE = 0x2, CREATE = 0x4, EXRESCODE = 0x02000000;
+    private static final int READONLY = 0x1, READWRITE = 0x2, CREATE = 0x4;
+    private static final int FULLMUTEX = 0x00010000, PRIVATECACHE = 0x00040000, EXRESCODE = 0x02000000;
     private static final MemorySegment TRANSIENT = MemorySegment.ofAddress(-1L);
 
     private Native() { }
@@ -82,7 +83,8 @@ final class Native {
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment out = arena.allocate(PTR);
             int flags = readonly ? READONLY : READWRITE | (create ? CREATE : 0);
-            int code = integer(OPEN, arena.allocateFrom(path.toString()), out, flags | EXRESCODE,
+            int code = integer(OPEN, arena.allocateFrom(path.toString()), out,
+                    flags | FULLMUTEX | PRIVATECACHE | EXRESCODE,
                     MemorySegment.NULL);
             MemorySegment handle = out.get(PTR, 0);
             if (code != OK) {
