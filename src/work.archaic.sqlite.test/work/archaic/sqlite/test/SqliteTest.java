@@ -15,5 +15,9 @@ public record SqliteTest() implements TestSuite {
         cases.add(new RepeatedClose(provider));
         cases.add(new InterruptedLease(provider, false));
         cases.add(new InterruptedLease(provider, true));
+        cases.add(new IndependentWriterLock(provider));
+        cases.add(new BackupFaultCleanup(provider));
+        cases.add(new BackupDeadline(provider));
+        cases.add(new NativeHandleCycles(provider));
     }
 }
