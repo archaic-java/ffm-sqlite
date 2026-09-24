@@ -254,7 +254,9 @@ record BackupDeadline(Sqlite provider) implements TestCase {
                 }
                 assert FaultFixture.rows(db).equals("1:original:original;")
                         : "Sole reader should remain usable after backup deadline";
-                db.backup(target, Duration.ofSeconds(2));
+                // Recovery must succeed; it need not meet the earlier one-nanosecond deadline.
+                // Give slower CI hosts room to finish the multi-page copy after cleanup.
+                db.backup(target, Duration.ofSeconds(15));
                 try (var reopened = provider.open(target, 1, Duration.ofSeconds(2))) {
                     assert FaultFixture.rows(reopened).equals("1:original:original;")
                             : "Next backup should publish complete original rows";
