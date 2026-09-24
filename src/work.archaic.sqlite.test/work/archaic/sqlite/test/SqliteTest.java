@@ -27,5 +27,6 @@ public record SqliteTest() implements TestSuite {
         cases.add(new HarnessSelfCheck("hang", "overall timeout"));
         cases.add(new HarnessSelfCheck("hang-descendant", "overall timeout"));
         ModelScenarios.register(provider, cases);
+        CrashScenarios.register(provider, cases);
     }
 }

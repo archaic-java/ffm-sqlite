@@ -38,3 +38,14 @@ java -Dsqlite.model.sequence=/path/to/sequence.txt @cmd/test
 ```
 
 This selects one model case; other fast conformance cases still run. A seed determines the operation list, not OS thread scheduling. The saved sequence is authoritative for replay after code or generator changes.
+
+Crash recovery cases kill a child before a transaction, after its debit, after its credit, and after the `write` call has confirmed commit. Two bounded timing samples start from a `before-commit` acknowledgement and kill after a seed-derived 0–5 ms delay. Such a sample is **not** a deterministic kill inside SQLite COMMIT. The verifier is a fresh JVM that reopens the original database together with its WAL/SHM files; it checks actual balances, the unique transfer ID, `integrity_check`, and `foreign_key_check`. A confirmed commit must appear; an unacknowledged commit may be wholly present or absent. The parent retains `history.txt`, `command.txt`, output logs, the real database/WAL/SHM files, and runtime/SQLite settings on failure.
+
+Fast validation runs two timing samples. Run a separate bounded campaign with `java -Dsqlite.crash.samples=20 @cmd/test` (maximum 100); replay a single case with:
+
+```sh
+java -Dsqlite.crash.mode=random -Dsqlite.crash.seed=20260924 \
+  -Dsqlite.crash.iteration=7 @cmd/test
+```
+
+`sqlite.crash.mode` also accepts `before`, `debit`, `credit`, and `commit`. The provider records its actual `PRAGMA synchronous` value in the failure fixture. These tests establish process-crash recovery under that configuration; they do not simulate loss of host power or prove storage durability. A precise inside-COMMIT kill would need an explicit native test hook that does not exist in v01.
