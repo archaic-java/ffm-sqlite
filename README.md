@@ -30,3 +30,11 @@ java -ea --enable-native-access=work.archaic.sqlite --module-path out \
 ```
 
 Replace `success` and the directory with the values recorded in `command.txt`. The protocol is one stdout line each for `READY`, optional `PROGRESS token`, and `COMPLETED`; successful exit also requires status zero. The parent enforces startup and overall deadlines, drains both output streams, and kills/reaps the process tree after failure.
+
+Sequential model scenarios run three fixed seeds (`1`, `42`, `20260924`) with 64 operations each during the normal Minau command. The model tracks account balances and unique committed transfer IDs in Java, independently of SQLite queries. Override with `-Dsqlite.model.seed=<long>` and `-Dsqlite.model.iterations=<1..10000>` before `@cmd/test` for a bounded larger sample. Failures retain the database, `sequence.txt` (exact `sqlite-model-v1` operations), and `environment.txt` (seed, Java version/vendor, SQLite version, journal and synchronous settings). Replay that saved sequence from the repository root:
+
+```sh
+java -Dsqlite.model.sequence=/path/to/sequence.txt @cmd/test
+```
+
+This selects one model case; other fast conformance cases still run. A seed determines the operation list, not OS thread scheduling. The saved sequence is authoritative for replay after code or generator changes.
