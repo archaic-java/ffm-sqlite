@@ -49,3 +49,5 @@ java -Dsqlite.crash.mode=random -Dsqlite.crash.seed=20260924 \
 ```
 
 `sqlite.crash.mode` also accepts `before`, `debit`, `credit`, and `commit`. The provider records its actual `PRAGMA synchronous` value in the failure fixture. These tests establish process-crash recovery under that configuration; they do not simulate loss of host power or prove storage durability. A precise inside-COMMIT kill would need an explicit native test hook that does not exist in v01.
+
+[CI campaigns and mutation audit](docs/sqlite-campaigns.md) record the tested dependency pins, runner matrix, local commands, failure artifacts and coverage gaps.

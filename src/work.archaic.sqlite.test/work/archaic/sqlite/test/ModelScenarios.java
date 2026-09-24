@@ -19,6 +19,7 @@ import work.archaic.service.test.v02.TestTrail;
 final class ModelScenarios {
     private ModelScenarios() { }
     static void register(Sqlite provider, java.util.Collection<TestCase> cases) {
+        if (System.getProperty("sqlite.model.enabled", "true").equals("false")) return;
         int iterations = bounded("sqlite.model.iterations", 64, 1, 10_000);
         String saved = System.getProperty("sqlite.model.sequence");
         if (saved != null) {

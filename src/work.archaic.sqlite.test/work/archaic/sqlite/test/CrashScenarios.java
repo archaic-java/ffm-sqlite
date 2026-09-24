@@ -13,6 +13,7 @@ import work.archaic.service.test.v02.TestTrail;
 final class CrashScenarios {
     private CrashScenarios() { }
     static void register(Sqlite provider, java.util.Collection<TestCase> cases) {
+        if (System.getProperty("sqlite.crash.enabled", "true").equals("false")) return;
         long seed = Long.parseLong(System.getProperty("sqlite.crash.seed", "20260924"));
         int iteration = bounded("sqlite.crash.iteration", 0, 0, 10_000);
         String mode = System.getProperty("sqlite.crash.mode");
