@@ -6,8 +6,14 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  fast:
+    name: Fast ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-24.04, ubuntu-22.04-arm, ubuntu-24.04-arm]
     defaults:
       run:
         working-directory: ffm-sqlite
@@ -17,12 +23,19 @@ jobs:
         with:
           path: ffm-sqlite
           persist-credentials: false
-      - name: Check out catalog contract
+      - name: Check out tested catalog
         uses: actions/checkout@v7
         with:
           repository: archaic-java/service-catalog
-          ref: d2d94ca76adf13941814b7dc92975906c8d49b23
+          ref: 85b5d00e341d52abdc7b2fca32d8a8f888309767
           path: service-catalog
+          persist-credentials: false
+      - name: Check out tested Minau
+        uses: actions/checkout@v7
+        with:
+          repository: archaic-java/minau
+          ref: 890647065e1250ef3b628bf292b3d78d22f4024a
+          path: minau
           persist-credentials: false
       - uses: actions/setup-java@v6
         with:
@@ -30,5 +43,25 @@ jobs:
           java-version: '25'
       - name: Compile
         run: javac @cmd/compile
-      - name: Test
-        run: java @cmd/test
+      - name: Record actual SQLite environment
+        run: |
+          set -euo pipefail
+          uname -m
+          java @cmd/sqlite-info | tee ci-environment.txt
+      - name: Fast Minau suite
+        run: |
+          set -euo pipefail
+          java @cmd/test 2>&1 | tee ci-fast.log
+      - name: Retain synthetic failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-fast-${{ matrix.runner }}-${{ github.run_id }}
+          path: |
+            ffm-sqlite/ci-environment.txt
+            ffm-sqlite/ci-fast.log
+            /tmp/ffm-sqlite-*
+            /tmp/sqlite-conformance-*
+          if-no-files-found: warn
+          retention-days: 7
+          compression-level: 0

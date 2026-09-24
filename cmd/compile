@@ -1,4 +1,4 @@
 --release 25
 --module-source-path src:lib/src
---module work.archaic.service.catalog,work.archaic.service.catalog.test,work.archaic.sqlite,work.archaic.sqlite.test
+--module work.archaic.service.catalog,work.archaic.service.catalog.test,work.archaic.minau,work.archaic.sqlite,work.archaic.sqlite.test
 -d out

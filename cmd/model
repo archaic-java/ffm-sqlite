@@ -2,5 +2,6 @@
 --enable-native-access=work.archaic.sqlite
 --module-path out
 --add-modules work.archaic.sqlite,work.archaic.sqlite.test
+-Dsqlite.crash.enabled=false
 -m work.archaic.minau/work.archaic.minau.Main
 work.archaic.sqlite.test
