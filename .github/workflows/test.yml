@@ -1,0 +1,34 @@
+name: Test
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ffm-sqlite
+    steps:
+      - name: Check out provider
+        uses: actions/checkout@v7
+        with:
+          path: ffm-sqlite
+          persist-credentials: false
+      - name: Check out catalog contract
+        uses: actions/checkout@v7
+        with:
+          repository: archaic-java/service-catalog
+          ref: feat/sqlite-v01
+          path: service-catalog
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Compile
+        run: javac @cmd/compile
+      - name: Test
+        run: java @cmd/test
