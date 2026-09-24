@@ -19,5 +19,12 @@ public record SqliteTest() implements TestSuite {
         cases.add(new BackupFaultCleanup(provider));
         cases.add(new BackupDeadline(provider));
         cases.add(new NativeHandleCycles(provider));
+        cases.add(new HarnessSelfCheck("success", null));
+        cases.add(new HarnessSelfCheck("nonzero", "exit"));
+        cases.add(new HarnessSelfCheck("malformed", "startup protocol"));
+        cases.add(new HarnessSelfCheck("no-ready", "startup timeout"));
+        cases.add(new HarnessSelfCheck("missing", "protocol"));
+        cases.add(new HarnessSelfCheck("hang", "overall timeout"));
+        cases.add(new HarnessSelfCheck("hang-descendant", "overall timeout"));
     }
 }
