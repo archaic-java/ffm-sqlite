@@ -12,5 +12,6 @@ public record SqliteTest() implements TestSuite {
     @Override public void cases(Collection<TestCase> cases) {
         Sqlite provider = ServiceLoader.load(Sqlite.class).findFirst().orElseThrow();
         SqliteCases.register(provider, cases);
+        cases.add(new RepeatedClose(provider));
     }
 }
