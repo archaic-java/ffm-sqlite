@@ -2,6 +2,8 @@
 
 Linux SQLite provider for `work.archaic.service.sqlite.v01.Sqlite`, using JDK 25 FFM and the system `libsqlite3.so.0`. One writer connection and a bounded set of read-only connections serve scoped transactions. The provider uses WAL mode and enables foreign keys on each connection.
 
+The JPMS service provider and its implementation live in the unexported `work.archaic.sqlite.internal` package. Only `FfmSqlite` is public for service loading; the database coordinator, session, statement, connection and native bindings are separate package-private classes.
+
 Build and verify with a sibling checkout of [service-catalog](https://github.com/archaic-java/service-catalog):
 
 ```sh
