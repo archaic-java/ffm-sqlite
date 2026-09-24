@@ -21,8 +21,15 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: archaic-java/service-catalog
-          ref: d2d94ca76adf13941814b7dc92975906c8d49b23
+          ref: 474d272cf603e8edc1713f07f10e5a29b2022373
           path: service-catalog
+          persist-credentials: false
+      - name: Check out Minau runner
+        uses: actions/checkout@v7
+        with:
+          repository: archaic-java/minau
+          ref: 7abc609a7092dc6491d9af299499cfe434ad7f23
+          path: minau
           persist-credentials: false
       - uses: actions/setup-java@v6
         with:

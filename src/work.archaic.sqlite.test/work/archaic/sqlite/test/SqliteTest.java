@@ -1,9 +1,16 @@
 package work.archaic.sqlite.test;
 
-import work.archaic.service.catalog.test.SqliteProviderContract;
+import java.util.Collection;
+import java.util.ServiceLoader;
+import work.archaic.service.catalog.test.SqliteCases;
+import work.archaic.service.sqlite.v01.Sqlite;
+import work.archaic.service.test.v02.TestCase;
+import work.archaic.service.test.v02.TestSuite;
 
-public final class SqliteTest {
-    public static void main(String[] args) throws Exception {
-        SqliteProviderContract.main(args);
+/** Runs the reusable SQLite v01 catalog cases against this provider. */
+public record SqliteTest() implements TestSuite {
+    @Override public void cases(Collection<TestCase> cases) {
+        Sqlite provider = ServiceLoader.load(Sqlite.class).findFirst().orElseThrow();
+        SqliteCases.register(provider, cases);
     }
 }
