@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import work.archaic.service.test.v02.TestCase;
@@ -21,6 +22,8 @@ final class ChildJvm {
     private static final String EOF = "\u0000EOF";
     private static final int OUTPUT_LIMIT = 65_536;
     private static final int LINE_LIMIT = 256;
+    // Minau runs cases concurrently; a large crash campaign must not start many JVMs at once.
+    private static final Semaphore CHILD_SLOT = new Semaphore(1, true);
     private ChildJvm() { }
 
     static final class Failure extends Exception {
@@ -44,9 +47,12 @@ final class ChildJvm {
         var lines = new ArrayBlockingQueue<String>(128);
         var pumpError = new AtomicReference<Throwable>();
         boolean passed = false;
+        boolean acquired = false;
         Throwable originalFailure = null;
-        long deadline = System.nanoTime() + overall.toNanos();
         try {
+            CHILD_SLOT.acquire();
+            acquired = true;
+            long deadline = System.nanoTime() + overall.toNanos();
             process = new ProcessBuilder(command).start();
             Process child = process;
             stdout = Thread.ofVirtual().start(() -> pump(child.getInputStream(),
@@ -101,6 +107,7 @@ final class ChildJvm {
                     else cleanupFailure.addSuppressed(cleanup);
                 }
             } else trail.note("Retained child files: " + directory);
+            if (acquired) CHILD_SLOT.release();
             if (cleanupFailure != null) {
                 if (originalFailure != null) originalFailure.addSuppressed(cleanupFailure);
                 else if (cleanupFailure instanceof Exception error) throw error;
@@ -139,8 +146,11 @@ final class ChildJvm {
                 + "\ndelay-ms=" + delayMillis + "\nseed=" + seed + "\niteration=" + iteration
                 + "\njava.version=" + System.getProperty("java.version") + "\n");
         Throwable originalFailure = null;
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        boolean acquired = false;
         try {
+            CHILD_SLOT.acquire();
+            acquired = true;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
             process = new ProcessBuilder(command).start();
             Process child = process;
             stdout = Thread.ofVirtual().start(() -> pump(child.getInputStream(),
@@ -196,6 +206,7 @@ final class ChildJvm {
                     if (cleanupFailure == null) cleanupFailure = cleanup;
                     else cleanupFailure.addSuppressed(cleanup);
                 }
+            if (acquired) CHILD_SLOT.release();
             if (cleanupFailure != null) {
                 if (originalFailure != null) originalFailure.addSuppressed(cleanupFailure);
                 else if (cleanupFailure instanceof Exception error) throw error;
