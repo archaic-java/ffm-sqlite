@@ -13,5 +13,7 @@ public record SqliteTest() implements TestSuite {
         Sqlite provider = ServiceLoader.load(Sqlite.class).findFirst().orElseThrow();
         SqliteCases.register(provider, cases);
         cases.add(new RepeatedClose(provider));
+        cases.add(new InterruptedLease(provider, false));
+        cases.add(new InterruptedLease(provider, true));
     }
 }
